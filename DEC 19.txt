@@ -1,0 +1,327 @@
+//TextNumberMatching
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class TextNumberMatching : MonoBehaviour
+{ 
+    [Header("Text Number")] [Tooltip("Holder of matching numbers")]
+    public Text playerText;
+    public Text[] targetTexts = new Text[2];
+    
+
+    [Header("Min and Max")] [Tooltip("The Min and Max for matching number")] 
+    [SerializeField]
+    private int min = 0;
+    [SerializeField]
+    private int max = 10;
+  
+    public CountdownTimer countdownTimer;
+
+    private int wrongMatchCount = 0;
+
+    void Start() 
+    {
+        RandomizeNumbers();
+        countdownTimer = FindObjectOfType<CountdownTimer>();
+        Debug.Log(countdownTimer);
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        Text collidedText = collision.gameObject.GetComponentInChildren<Text>();
+
+        Debug.Log("Collision detected with : " + collision.gameObject.name);
+
+        if (collidedText != null)
+        {
+            CheckMatch();
+        }   
+    }
+
+    public void CheckMatch()
+    {
+        Text playerText = GameObject.FindGameObjectWithTag("PlayerText").GetComponent<Text>();
+
+        Text targetText = GameObject.FindGameObjectWithTag("TargetText").GetComponent<Text>();
+
+        bool isMatch = false;
+
+        foreach (Text target in targetTexts)
+        {
+            if (playerText.text == targetText.text)
+            {
+                //Found a Match
+                isMatch = true;
+                break;
+            }
+        }
+
+            if (isMatch)
+            {
+                //Found a Match
+                countdownTimer.AddTime(4);
+                wrongMatchCount = 0;
+            }
+
+            else
+            {
+                if (wrongMatchCount == 3)
+                {
+                    countdownTimer.SubtractTimeForWrongMatch();
+                    wrongMatchCount = 0; 
+                }
+                else
+                {
+                    wrongMatchCount++;
+                }
+
+                switch (wrongMatchCount)
+                {
+                    case 1: //Found ist Mismatch 
+                    RandomizeNumbers();
+                    break;
+
+                    case 2: //Found 2nd Mismatch 
+                    RandomizeNumbers();
+                    break;
+
+                    case 3: //Found 3rd Mismatch 
+                    break;
+
+                    default:
+                    Debug.Log("Unexpected value for wrongMatchCount " + wrongMatchCount);
+                    break;
+                }
+            }
+
+        //RandomizeNumbers();
+    }
+
+    public void RandomizeNumbers()
+    {
+        int playerNumber = Random.Range(min, max);
+        playerText.text = playerNumber.ToString();
+
+        int sameIndex = Random.Range(0, targetTexts.Length);
+        targetTexts[sameIndex].text = playerNumber.ToString();
+
+        for (int i = 0; i < targetTexts.Length; i++)
+        {
+            if (i != sameIndex)
+            {
+                int targetNumber = Random.Range(min, max);
+
+                while (targetNumber == playerNumber)
+                {
+                    targetNumber = Random.Range(min, max);
+                }
+
+                targetTexts[i].text = targetNumber.ToString();
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+//PlayerControllerPartTwo
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+[RequireComponent(typeof(Transform))]
+[RequireComponent(typeof(Rigidbody2D))]
+public class PlayerControllerPartTwo : MonoBehaviour
+{
+    [SerializeField]
+    private Transform[] targetobjects = new Transform[2];
+
+    [SerializeField]
+    private KeyCode[] moveKeys = {KeyCode.W, KeyCode.E};
+
+    [SerializeField]
+    private float moveTime = 1f;
+
+    private bool isMoving = false;
+
+    private Vector3 startPosition;
+
+    public TextNumberMatching textNumberMatching;
+
+    private Rigidbody2D rb;
+
+    private void Start() 
+    {
+        startPosition = transform.position;
+
+        textNumberMatching = GetComponent<TextNumberMatching>();    
+        rb = GetComponent<Rigidbody2D>();
+        rb.gravityScale = 0f;
+    }
+    
+    // Update is called once per frame
+    void Update()
+    {
+        if (textNumberMatching.countdownTimer.ControlsActive && !isMoving)
+        {
+            for (int i = 0; i < targetobjects.Length; i++)
+            {
+                if (Input.GetKeyDown(moveKeys[i]))
+                {
+                    StartCoroutine(MoveToTarget(targetobjects[i])); 
+                   break;             
+                }
+            }
+        }   
+    }
+
+    IEnumerator MoveToTarget(Transform target)
+    {
+        isMoving = true;
+        float elapsedTime = 0f;
+        Vector3 startPos = transform.position;
+
+        while (elapsedTime < moveTime)
+        {
+            transform.position = Vector3.Lerp(startPos, target.position, elapsedTime / moveTime);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.position = target.position;
+
+        StartCoroutine(Respawn());
+        
+        textNumberMatching.CheckMatch();
+
+        yield return new WaitForSeconds(moveTime);
+        isMoving = false;
+    }
+
+    IEnumerator Respawn()
+    {
+        transform.position = startPosition;
+        textNumberMatching.RandomizeNumbers();
+        yield return null;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+//CountdownTimer
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+
+[RequireComponent(typeof(Text))]
+public class CountdownTimer : MonoBehaviour
+{
+    [SerializeField]
+    private Text timerText;
+
+    [SerializeField]
+    private float totalTime = 30f;
+ 
+    private bool gameActive = true;
+    public bool GameActive
+    {
+        get{return gameActive;}
+        set{gameActive = value;}
+    }
+
+    public float timeRemaining;
+
+    private bool controlsActive = true;
+    public bool ControlsActive
+    {
+        get{return controlsActive;}
+        set{controlsActive = value;}
+    }
+
+    private void Start() 
+    {
+        timeRemaining = totalTime;
+        UpdateTimerText(); 
+    }
+
+    private void Update() 
+    {
+        if (gameActive)
+        {
+            if (timeRemaining > 0)
+            {
+                timeRemaining -= Time.deltaTime; 
+                UpdateTimerText();
+
+                if (timeRemaining <= 0f)
+                {
+                    EndGame();
+                }   
+            }        
+        }       
+    }
+
+    public void AddTime(int time)
+    {
+        timeRemaining += time;
+        UpdateTimerText();
+    }
+
+    public void AddTimeForMatch()
+    {
+        timeRemaining += 4;
+        Debug.Log("Time added, new time remaining: " + timeRemaining);
+        UpdateTimerText();  
+    }
+
+    public void SubtractTimeForWrongMatch()
+    {
+        timeRemaining -= 3;
+        Debug.Log("Time subtracted, new time remaining: " + timeRemaining);
+        UpdateTimerText();
+    }
+
+    public void UpdateTimerText()
+    {  
+        if (timeRemaining < 0f)
+        {
+            timeRemaining = 0f;
+        }
+
+        int minutes = Mathf.FloorToInt(timeRemaining / 60);
+        int seconds = Mathf.FloorToInt(timeRemaining % 60);
+
+        timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
+    }
+
+    void EndGame()
+    {
+        print("Game Over!");   
+        
+       // SceneManager.LoadScene("Try Again");
+        
+        controlsActive = false;
+        gameActive = false;
+
+    }
+}
